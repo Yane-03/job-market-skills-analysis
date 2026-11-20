@@ -45,7 +45,7 @@ CREATE TABLE job_postings (
     qualification TEXT,
     experience TEXT,
     cloud_platform TEXT,
-    date_posted DATE,
+    date_posted Text,
     date_collected DATE,
     source TEXT,
     job_url TEXT
@@ -63,3 +63,97 @@ CREATE TABLE job_skills (
     skill_type TEXT,
     PRIMARY KEY (job_id, skill_id, skill_type)
 );
+
+-- populating tables
+INSERT INTO job_postings (
+    job_id,
+    job_title,
+    company,
+    location,
+    country,
+    job_category,
+    seniority_level,
+    employment_type,
+    work_arrangement,
+    salary_min,
+    salary_max,
+    basic_salary,
+    salary_period,
+    currency,
+    qualification,
+    experience,
+    cloud_platform,
+    date_posted,
+    date_recorded,
+    source,
+    job_url
+)
+SELECT
+    job_id::INTEGER,
+    job_title,
+    company,
+    location,
+    country,
+    job_category,
+    seniority_level,
+    employment_type,
+    work_arrangement,
+    NULLIF(TRIM(salary_min), '')::NUMERIC,
+    NULLIF(TRIM(salary_max), '')::NUMERIC,
+    NULLIF(TRIM(basic_salary), '')::NUMERIC,
+    salary_period,
+    currency,
+    qualification,
+    experience,
+    cloud_platform,
+    date_posted,
+    TO_DATE(date_recorded, 'DD/MM/YYYY'),
+    source,
+    job_url
+FROM raw_job_ads;
+
+-- populating and triming skills down
+INSERT INTO skills (skill_name)
+SELECT DISTINCT TRIM(skill)
+FROM (
+    SELECT UNNEST(STRING_TO_ARRAY(required_skills, ',')) AS skill
+    FROM raw_job_ads
+
+    UNION ALL
+
+    SELECT UNNEST(STRING_TO_ARRAY(preferred_skills, ',')) AS skill
+    FROM raw_job_ads
+) AS all_skills
+WHERE TRIM(skill) <> ''
+ORDER BY TRIM(skill);
+
+-- populating
+INSERT INTO job_skills (
+    job_id,
+    skill_id,
+    skill_type
+)
+
+-- Insert required skills
+SELECT
+    r.job_id::INTEGER,
+    s.skill_id,
+    'Required' AS skill_type
+FROM raw_job_ads r
+CROSS JOIN LATERAL
+    UNNEST(STRING_TO_ARRAY(r.required_skills, ',')) AS skill
+JOIN skills s
+    ON LOWER(TRIM(skill)) = LOWER(s.skill_name)
+
+UNION
+
+-- Insert preferred skills
+SELECT
+    r.job_id::INTEGER,
+    s.skill_id,
+    'Preferred' AS skill_type
+FROM raw_job_ads r
+CROSS JOIN LATERAL
+    UNNEST(STRING_TO_ARRAY(r.preferred_skills, ',')) AS skill
+JOIN skills s
+    ON LOWER(TRIM(skill)) = LOWER(s.skill_name);
